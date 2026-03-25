@@ -180,11 +180,11 @@ class MaravillaGame(QWidget):
     def actualizar_ui(self): self.lbl_stats.setText(f"💎 {self.monedas} | XP: {self.puntos} | Nv: {self.dificultad_actual}")
     def agregar_mensaje_chat(self, d): self.chat_view.append(f"<b>{d['user']}:</b> {d['msg']}"); self.chat_view.moveCursor(QTextCursor.End)
     def conectar_servidor(self):
-        try: self.sio.connect("https://maravillagame-production.up.railway.app")
+        try: self.sio.connect("https://gamemaravilla-production.up.railway.app")
         except: pass
     def conectar_datos(self):
         try:
-            r = requests.post("https://maravillagame-production.up.railway.app", json={"id": self.uid}, timeout=2).json()
+            r = requests.post("https://gamemaravilla-production.up.railway.app/login", json={"id": self.uid}, timeout=5).json()
             self.puntos, self.monedas = r['stats']['puntos'], r['stats']['monedas']
             self.logros_usuario, self.trivias = r['stats'].get('logros', []), r.get('trivias', [])
             self.dificultad_actual = r.get('dificultad', 3)
