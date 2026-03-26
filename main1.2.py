@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 
-class MaravillaGame(QWidget):
+class gamemaravilla(QWidget):
     signal_resultado = pyqtSignal(dict)
     signal_chat = pyqtSignal(dict)
     signal_ranking = pyqtSignal(list)
@@ -201,4 +201,4 @@ class MaravillaGame(QWidget):
             if ok and res and self.sio.connected: self.sio.emit('verificar_trivia', {'user': self.uid, 'trivia_id': item['id'], 'respuesta': res})
 
 if __name__ == '__main__':
-    app = QApplication(sys.argv); ex = MaravillaGame(); ex.show(); sys.exit(app.exec_())
+    app = QApplication(sys.argv); ex = gamemaravilla(); ex.show(); sys.exit(app.exec_())
