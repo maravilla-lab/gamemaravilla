@@ -135,6 +135,10 @@ def verificar(data):
 @socketio.on('enviar_mensaje')
 def manejar_m(data): emit('recibir_mensaje', data, broadcast=True)
 
+@app.route('/')
+def home():
+    return "Servidor Maravilla Hub Online 🚀"
+    
 if __name__ == '__main__':
     # Usamos el puerto que asigne la nube (Render/Railway lo requieren)
     port = int(os.environ.get("PORT", 5000))
