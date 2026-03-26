@@ -38,7 +38,6 @@ def obtener_ranking():
     sorted_users = sorted(usuarios.items(), key=lambda x: x[1]['puntos'], reverse=True)
     return [{"user": u[0], "puntos": u[1]['puntos']} for u in sorted_users[:5]]
 
-# --- SECCIÓN DE TRIVIAS ---
 TRIVIAS_MAESTRAS = [
     {"id": 101, "cat": " Diario ⚡", "tit": "Reto TikTok 1", "costo": 10, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Qué color brilla?", "res": "verde", "premio": 1000},
     {"id": 102, "cat": " Diario ⚡", "tit": "Reto TikTok 2", "costo": 10, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Cuántos dedos ves?", "res": "3", "premio": 1000},
@@ -52,7 +51,7 @@ TRIVIAS_MAESTRAS = [
     # { "id": 300, "cat": " Socios 🤝", "tit": "Visita a @Amigo", "costo": 0, "url": "URL", "preg": "...", "res": "...", "premio": 2000 },
 ]
 
-# --- RUTA RAÍZ (PARA EVITAR EL 404) ---
+# --- RUTA RAÍZ ---
 @app.route('/')
 def home():
     return "Servidor Maravilla Hub Online 🚀"
@@ -74,23 +73,25 @@ def login():
 
 # --- TIKTOK LIVE ---
 def run_tiktok():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    client = TikTokLiveClient(unique_id=TIKTOK_USER)
-    @client.on("comment")
-    async def on_comment(event: CommentEvent):
-        msg = event.comment.lower()
-        if "!maravilla" in msg:
-            socketio.emit('evento_especial', {'tipo': 'efecto_visual', 'msg': '¡MODO MARAVILLA ACTIVADO!'})
-        socketio.emit('recibir_mensaje', {'user': event.user.nickname, 'msg': event.comment})
-    @client.on("gift")
-    async def on_gift(event: GiftEvent):
-        if event.gift.id == 5655:
-            socketio.emit('evento_especial', {'tipo': 'regalo', 'msg': f"¡{event.user.nickname} envió Rosa! +50M", 'monedas': 50})
-    async def start():
-        try: await client.connect()
-        except: pass
-    loop.run_until_complete(start())
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        client = TikTokLiveClient(unique_id=TIKTOK_USER)
+        @client.on("comment")
+        async def on_comment(event: CommentEvent):
+            msg = event.comment.lower()
+            if "!maravilla" in msg:
+                socketio.emit('evento_especial', {'tipo': 'efecto_visual', 'msg': '¡MODO MARAVILLA ACTIVADO!'})
+            socketio.emit('recibir_mensaje', {'user': event.user.nickname, 'msg': event.comment})
+        @client.on("gift")
+        async def on_gift(event: GiftEvent):
+            if event.gift.id == 5655:
+                socketio.emit('evento_especial', {'tipo': 'regalo', 'msg': f"¡{event.user.nickname} envió Rosa! +50M", 'monedas': 50})
+        async def start():
+            try: await client.connect()
+            except: pass
+        loop.run_until_complete(start())
+    except: pass
 
 threading.Thread(target=run_tiktok, daemon=True).start()
 
