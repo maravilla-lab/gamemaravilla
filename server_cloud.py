@@ -115,6 +115,8 @@ def actualizar_memoria(data):
 def manejar_m(data):
     emit('recibir_mensaje', data, broadcast=True)
 
+threading.Thread(target=run_tiktok, daemon=True).start()
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host='0.0.0.0', port=port)
