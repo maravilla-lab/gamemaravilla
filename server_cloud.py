@@ -5,43 +5,25 @@ import json, os, threading, asyncio, math
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit
 from TikTokLive import TikTokLiveClient
-from TikTokLive.events import CommentEvent, GiftEvent
+from TikTokLive.events import CommentEvent
 
 app = Flask(__name__)
-# Usamos un logger básico para ver qué pasa en Railway
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
-DB_PATH = "base_datos.json"
-TIKTOK_USER = "@portal.maravilla" 
-usuarios_conectados = set()
+# --- CONFIGURACIÓN DE ECONOMÍA ---
+PREMIO_ACIERTOS_XP = 100
+PREMIO_ACIERTOS_MONEDAS = 50
+PENALIZACION_FALLO_XP = 20
+PREMIO_COMPARTIR_MONEDAS = 100
+LIMITE_SHARES = 2
+REGALO_INICIAL_MONEDAS = 500  # Cambiar a 100 después del 3er Live
 
-# --- BALANCE ---
-RECOMPENSA_PUNTOS = 100
-RECOMPENSA_MONEDAS = 10
-PENALIZACION_PUNTOS = 20
+# --- BASE DE DATOS Y ADMIN ---
+usuarios = {} 
+TIKTOK_USER = "portal.maravilla" 
+ADMIN_UNIQUE_ID = "portal.maravilla"
 
-def calcular_dif(puntos):
-    dif = 3
-    if puntos >= 10:
-        dif += int(math.log10(puntos))
-    return dif
-
-def cargar_db():
-    if os.path.exists(DB_PATH):
-        try:
-            with open(DB_PATH, "r") as f: return json.load(f)
-        except: pass
-    return {}
-
-usuarios = cargar_db()
-
-def guardar_datos(data):
-    with open(DB_PATH, "w") as f: json.dump(data, f, indent=4)
-
-def obtener_ranking():
-    sorted_users = sorted(usuarios.items(), key=lambda x: x[1]['puntos'], reverse=True)
-    return [{"user": u[0], "puntos": u[1]['puntos']} for u in sorted_users[:5]]
-
+# --- TRIVIAS COMPLETAS ---
 TRIVIAS_MAESTRAS = [
     {"id": 101, "cat": " Diario ⚡", "tit": "Reto TikTok 1", "costo": 10, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Qué color brilla?", "res": "verde", "premio": 1000},
     {"id": 102, "cat": " Diario ⚡", "tit": "Reto TikTok 2", "costo": 10, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Cuántos dedos ves?", "res": "3", "premio": 1000},
@@ -54,66 +36,73 @@ TRIVIAS_MAESTRAS = [
 
     # { "id": 300, "cat": " Socios 🤝", "tit": "Visita a @Amigo", "costo": 0, "url": "URL", "preg": "...", "res": "...", "premio": 2000 },
 ]
+def obtener_ranking():
+    sorted_users = sorted(usuarios.items(), key=lambda x: x[1]['puntos'], reverse=True)
+    return [{"user": u[1]['nombre'], "puntos": u[1]['puntos'], "monedas": u[1]['monedas']} for u in sorted_users[:5]]
 
-# --- RUTAS HTTP ---
+# --- MOTOR TIKTOK ---
+def run_tiktok():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    client = TikTokLiveClient(unique_id=TIKTOK_USER)
+
+    @client.on("comment")
+    async def on_comment(event: CommentEvent):
+        u_id = event.user.unique_id
+        user_name = event.user.nickname
+        msg = event.comment.lower().strip()
+
+        if u_id not in usuarios:
+            usuarios[u_id] = {"nombre": user_name, "puntos": 0, "monedas": REGALO_INICIAL_MONEDAS, "shares": 0}
+
+        # COMANDO RECARGA POR REGALOS (Solo Admin)
+        if u_id == ADMIN_UNIQUE_ID and msg.startswith("!recarga"):
+            try:
+                partes = msg.split()
+                target = partes[1].replace("@", "")
+                monto = int(partes[2])
+                if target in usuarios:
+                    usuarios[target]['monedas'] += monto
+                    socketio.emit('update_ranking', obtener_ranking())
+                    print(f"RECARGA EXITOSA: {target} recibió {monto} monedas.")
+            except: pass
+
+        # JUEGO RÁPIDO POR NÚMEROS
+        mapeo = {"1": "rojo", "2": "azul", "3": "verde", "4": "amarillo"}
+        if msg in mapeo:
+            socketio.emit('intento_usuario', {'user': u_id, 'color': mapeo[msg]})
+        elif msg in ["rojo", "azul", "verde", "amarillo"]:
+            socketio.emit('intento_usuario', {'user': u_id, 'color': msg})
+
+    @client.on("share")
+    async def on_share(event):
+        u_id = event.user.unique_id
+        if u_id in usuarios:
+            if usuarios[u_id].get('shares', 0) < LIMITE_SHARES:
+                usuarios[u_id]['monedas'] += PREMIO_COMPARTIR_MONEDAS
+                usuarios[u_id]['shares'] += 1
+                socketio.emit('notificacion', {'msg': f"¡{usuarios[u_id]['nombre']} +100 monedas por compartir! 🎁"})
+                socketio.emit('update_ranking', obtener_ranking())
+
+    async def start():
+        try: await client.connect()
+        except: pass
+    loop.run_until_complete(start())
+
+# --- RUTAS ---
 @app.route('/')
-def home():
-    return "Servidor Maravilla Hub Online 🚀"
+def home(): return "Servidor Maravilla Hub ONLINE 🚀"
 
 @app.route('/login', methods=['POST'])
 def login():
     uid = request.json.get('id', 'Invitado')
     if uid not in usuarios:
-        usuarios[uid] = {"puntos": 0, "monedas": 500, "logros": []}
-    guardar_datos(usuarios)
+        usuarios[uid] = {"nombre": uid, "puntos": 0, "monedas": REGALO_INICIAL_MONEDAS, "shares": 0}
+    
     trivias_pub = [{k: v for k, v in t.items() if k != 'res'} for t in TRIVIAS_MAESTRAS]
-    return jsonify({
-        "stats": usuarios[uid], 
-        "trivias": trivias_pub, 
-        "ranking": obtener_ranking(), 
-        "online": len(usuarios_conectados),
-        "dificultad": calcular_dif(usuarios[uid]['puntos'])
-    })
+    return jsonify({"stats": usuarios[uid], "trivias": trivias_pub, "ranking": obtener_ranking()})
 
-# --- LÓGICA TIKTOK ---
-def run_tiktok():
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        client = TikTokLiveClient(unique_id=TIKTOK_USER)
-        
-        @client.on("comment")
-        async def on_comment(event: CommentEvent):
-            socketio.emit('recibir_mensaje', {'user': event.user.nickname, 'msg': event.comment})
-            
-        async def start():
-            try: await client.connect()
-            except: pass
-        loop.run_until_complete(start())
-    except: pass
-
-# --- EVENTOS SOCKET ---
-@socketio.on('connect')
-def handle_connect():
-    usuarios_conectados.add(request.sid)
-    emit('usuarios_online', len(usuarios_conectados), broadcast=True)
-
-@socketio.on('actualizar_progreso_memoria')
-def actualizar_memoria(data):
-    uid = data.get('user')
-    if uid in usuarios:
-        if data.get('exito', False):
-            usuarios[uid]['puntos'] += RECOMPENSA_PUNTOS
-            usuarios[uid]['monedas'] += RECOMPENSA_MONEDAS
-        else:
-            usuarios[uid]['puntos'] = max(0, usuarios[uid]['puntos'] - PENALIZACION_PUNTOS)
-        guardar_datos(usuarios)
-        socketio.emit('update_ranking', obtener_ranking())
-        emit('resultado_trivia', {'success': True, 'stats': usuarios[uid]})
-
-# --- ARRANQUE ---
 if __name__ == '__main__':
-    # Lanzamos TikTok en un hilo separado
     threading.Thread(target=run_tiktok, daemon=True).start()
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host='0.0.0.0', port=port)
