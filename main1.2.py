@@ -13,7 +13,7 @@ class MaravillaGame(QWidget):
 
     def __init__(self):
         super().__init__()
-        # TAMAÑO COMPACTO ORIGINAL
+        # MANTENEMOS TU DISEÑO COMPACTO ORIGINAL
         self.setFixedSize(450, 780)
         self.setWindowTitle("Maravilla Hub")
         self.dificultad_actual = 3
@@ -22,11 +22,10 @@ class MaravillaGame(QWidget):
         if not ok or not self.uid: self.uid = "Invitado"
 
         self.puntos, self.monedas = 0, 0
-        # CORREGIDO: 4 variables para 4 listas
         self.trivias, self.logros_usuario, self.patron, self.secuencia_usuario = [], [], [], []
         self.sio = socketio.Client()
         
-        # Conexiones de señales
+        # Conexiones de señales originales
         self.signal_resultado.connect(self.procesar_resultado)
         self.signal_chat.connect(self.agregar_mensaje_chat)
         self.signal_ranking.connect(self.actualizar_ranking_ui)
@@ -38,15 +37,16 @@ class MaravillaGame(QWidget):
         self.conectar_sio()
         self.conectar_datos()
 
-        # Ciclo automático de 10 segundos
-        self.timer_ciclo = QTimer()
-        self.timer_ciclo.timeout.connect(self.generar_patron)
-        self.timer_ciclo.start(10000) 
+        # --- MEJORA: CICLO AUTOMÁTICO DE 10 SEGUNDOS ---
+        self.timer_auto = QTimer(self)
+        self.timer_auto.timeout.connect(self.generar_patron)
+        self.timer_auto.start(10000) # Se ejecuta solo cada 10 seg.
 
     def init_ui(self):
         self.setStyleSheet("background-color: black; color: white; font-family: Segoe UI;")
         layout = QVBoxLayout()
 
+        # Stats Header Original
         stats = QHBoxLayout()
         self.lbl_user = QLabel(f"👤 {self.uid}")
         self.lbl_puntos = QLabel("XP: 0")
@@ -56,6 +56,7 @@ class MaravillaGame(QWidget):
         stats.addWidget(self.lbl_user); stats.addStretch(); stats.addWidget(self.lbl_puntos); stats.addWidget(self.lbl_monedas); stats.addWidget(self.lbl_online)
         layout.addLayout(stats)
 
+        # Trofeo y Líder Original
         self.trofeo = QLabel("🏆")
         self.trofeo.setAlignment(Qt.AlignCenter)
         self.trofeo.setStyleSheet("font-size: 50px; margin: 5px;")
@@ -66,6 +67,7 @@ class MaravillaGame(QWidget):
         self.lbl_lider.setStyleSheet("color: #f1c40f; font-weight: bold;")
         layout.addWidget(self.lbl_lider)
 
+        # Visualizador de Patrón Original
         self.display_patron = QHBoxLayout()
         self.bolas = [QLabel() for _ in range(6)]
         for b in self.bolas:
@@ -74,16 +76,20 @@ class MaravillaGame(QWidget):
             self.display_patron.addWidget(b)
         layout.addLayout(self.display_patron)
 
+        # Botones de Colores (Estilo TikTok Original)
         grid = QGridLayout()
+        self.btns = {}
         colores = {"rojo": "#fe2c55", "azul": "#25f4ee", "verde": "#3fb950", "amarillo": "#f1c40f"}
-        for i, (name, hex) in enumerate(colores.items()):
-            btn = QPushButton(f"{i+1}")
+        for i, (name, hex_code) in enumerate(colores.items()):
+            btn = QPushButton(f"{i+1}") # Etiqueta 1, 2, 3, 4
             btn.setFixedSize(85, 85)
-            btn.setStyleSheet(f"background: {hex}; color: black; border-radius: 42px; font-weight: bold; font-size: 18px;")
+            btn.setStyleSheet(f"background: {hex_code}; color: black; border-radius: 42px; font-weight: bold; font-size: 18px;")
             btn.clicked.connect(lambda _, n=name: self.registrar_secuencia(n))
+            self.btns[name] = btn
             grid.addWidget(btn, 0, i)
         layout.addLayout(grid)
 
+        # Ranking y Trivias Originales
         layout.addWidget(QLabel("🏆 RANKING"))
         self.lista_rank = QListWidget()
         self.lista_rank.setFixedHeight(120)
@@ -95,6 +101,12 @@ class MaravillaGame(QWidget):
         layout.addWidget(self.lista_trivias)
 
         self.setLayout(layout)
+
+    # --- MEJORA: SOPORTE PARA TECLAS 1, 2, 3, 4 ---
+    def keyPressEvent(self, event):
+        teclas = {Qt.Key_1: "rojo", Qt.Key_2: "azul", Qt.Key_3: "verde", Qt.Key_4: "amarillo"}
+        if event.key() in teclas:
+            self.registrar_secuencia(teclas[event.key()])
 
     def conectar_sio(self):
         @self.sio.on('update_ranking')
