@@ -4,6 +4,7 @@ from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 
 class MaravillaGame(QWidget):
+    # Señales para comunicación segura entre hilos
     signal_resultado = pyqtSignal(dict)
     signal_chat = pyqtSignal(dict)
     signal_ranking = pyqtSignal(list)
@@ -14,14 +15,13 @@ class MaravillaGame(QWidget):
     def __init__(self):
         super().__init__()
         self.dificultad_actual = 3
-        self.muted = False
-        self.uid = "portal.maravilla" # Tu ID Admin
+        self.uid = "portal.maravilla" # Tu ID de Administrador
 
         self.puntos, self.monedas = 0, 0
-        self.trivias, self.logros_usuario, self.patron, self.secuencia_usuario = [], [], [], []
+        self.trivias, self.patron, self.secuencia_usuario = [], [], []
         self.sio = socketio.Client()
         
-        # Conexiones de señales
+        # Conexiones de señales (Ahora todas las funciones existen)
         self.signal_resultado.connect(self.procesar_resultado)
         self.signal_chat.connect(self.agregar_mensaje_chat)
         self.signal_ranking.connect(self.actualizar_ranking_ui)
@@ -33,10 +33,10 @@ class MaravillaGame(QWidget):
         self.conectar_sio()
         self.conectar_datos()
 
-        # Temporizador para el ciclo de 10 segundos
+        # Temporizador para el ciclo automático de 10 segundos
         self.timer_ciclo = QTimer()
         self.timer_ciclo.timeout.connect(self.generar_patron)
-        self.timer_ciclo.start(10000) # 10 segundos
+        self.timer_ciclo.start(10000) 
 
     def init_ui(self):
         self.setWindowTitle("Maravilla Hub - Live 24H")
@@ -46,7 +46,7 @@ class MaravillaGame(QWidget):
         layout = QHBoxLayout()
         left = QVBoxLayout()
         
-        # --- HEADER ---
+        # --- HEADER (STATS) ---
         header = QHBoxLayout()
         self.lbl_user = QLabel(f"👤 {self.uid}")
         self.lbl_puntos = QLabel("XP: 0")
@@ -56,7 +56,7 @@ class MaravillaGame(QWidget):
         header.addWidget(self.lbl_user); header.addStretch(); header.addWidget(self.lbl_puntos); header.addWidget(self.lbl_monedas); header.addWidget(self.lbl_online)
         left.addLayout(header)
 
-        # --- ÁREA DE JUEGO (TROFEO Y PATRÓN) ---
+        # --- ÁREA CENTRAL (TROFEO Y LÍDER) ---
         self.trofeo = QLabel("🏆")
         self.trofeo.setAlignment(Qt.AlignCenter)
         self.trofeo.setStyleSheet("font-size: 80px; margin: 10px;")
@@ -67,6 +67,7 @@ class MaravillaGame(QWidget):
         self.lbl_lider.setStyleSheet("color: #f1c40f; font-weight: bold; font-size: 20px;")
         left.addWidget(self.lbl_lider)
 
+        # --- VISUALIZADOR DE PATRÓN ---
         self.display_patron = QHBoxLayout()
         self.bolas = [QLabel() for _ in range(6)]
         for b in self.bolas:
@@ -74,25 +75,19 @@ class MaravillaGame(QWidget):
             self.display_patron.addWidget(b)
         left.addLayout(self.display_patron)
 
-        # Leyenda de ayuda para el chat
         self.leyenda = QLabel("1:ROJO | 2:AZUL | 3:VERDE | 4:AMARILLO")
         self.leyenda.setAlignment(Qt.AlignCenter)
         self.leyenda.setStyleSheet("color: #8b949e; font-size: 14px; margin-top: 10px;")
         left.addWidget(self.leyenda)
 
-        # --- CONTROLES ---
-        self.btn_gen = QPushButton("INICIAR CICLO 24H")
-        self.btn_gen.clicked.connect(self.generar_patron)
-        self.btn_gen.setStyleSheet("background: #238636; font-weight: bold; height: 50px; border-radius: 10px;")
-        left.addWidget(self.btn_gen)
-
+        # --- BOTONES DE COLORES (1-4) ---
         grid = QGridLayout()
         self.btns = {}
         colores_hex = {"rojo": "#f85149", "azul": "#58a6ff", "verde": "#3fb950", "amarillo": "#d29922"}
         for i, (name, hex) in enumerate(colores_hex.items()):
-            btn = QPushButton(f"{i+1}") # Mostramos el número en el botón
+            btn = QPushButton(f"{i+1}") 
             btn.setFixedSize(120, 120)
-            btn.setStyleSheet(f"background: {hex}; border-radius: 60px; font-size: 24px; font-weight: bold;")
+            btn.setStyleSheet(f"background: {hex}; border-radius: 60px; font-size: 24px; font-weight: bold; border: 3px solid #30363d;")
             btn.clicked.connect(lambda _, n=name: self.registrar_secuencia(n))
             self.btns[name] = btn
             grid.addWidget(btn, 0, i)
@@ -106,11 +101,11 @@ class MaravillaGame(QWidget):
         right.addWidget(self.lbl_rank_tit)
         
         self.lista_rank = QListWidget()
-        self.lista_rank.setStyleSheet("background: #161b22; border: none; font-size: 14px;")
+        self.lista_rank.setStyleSheet("background: #161b22; border: none; font-size: 14px; padding: 5px;")
         right.addWidget(self.lista_rank)
 
         self.chat = QTextEdit(); self.chat.setReadOnly(True)
-        self.chat.setStyleSheet("background: #010409; border: 1px solid #30363d; color: #8b949e;")
+        self.chat.setStyleSheet("background: #010409; border: 1px solid #30363d; color: #8b949e; font-size: 12px;")
         right.addWidget(self.chat)
         
         layout.addLayout(right, 1)
@@ -119,16 +114,15 @@ class MaravillaGame(QWidget):
     # --- LÓGICA DE CONEXIÓN ---
     def conectar_sio(self):
         @self.sio.on('connect')
-        def on_connect(): print("Conectado SIO")
+        def on_connect(): print("SIO: Conectado a Railway")
 
         @self.sio.on('update_ranking')
         def on_rank(data): self.signal_ranking.emit(data)
 
         @self.sio.on('intento_usuario')
         def on_intento(data):
-            # Esta señal recibe el intento de TikTok (1,2,3,4)
-            self.signal_chat.emit({'user': data['user'], 'msg': f"envió {data['color']}"})
-            # Aquí podrías comparar con el patrón actual si quieres puntuar directo
+            # Recibe lo que la gente escribe en TikTok
+            self.signal_chat.emit({'user': data['user'], 'msg': f"marcó {data['color']}"})
 
         @self.sio.on('notificacion')
         def on_notif(data): self.signal_especial.emit(data)
@@ -156,11 +150,10 @@ class MaravillaGame(QWidget):
             if i < len(self.patron):
                 color = self.patron[i]
                 hex_c = {"rojo": "#f85149", "azul": "#58a6ff", "verde": "#3fb950", "amarillo": "#d29922"}[color]
-                b.setStyleSheet(f"background: {hex_c}; border-radius: 30px; border: 2px solid white;")
+                b.setStyleSheet(f"background: {hex_c}; border-radius: 30px; border: 3px solid white;")
             else:
                 b.setStyleSheet("background: #161b22; border-radius: 30px; border: 2px solid #30363d;")
         
-        # El patrón brilla 3 segundos y luego se oculta para que memoricen
         QTimer.singleShot(3000, self.ocultar_patron)
 
     def ocultar_patron(self):
@@ -170,8 +163,18 @@ class MaravillaGame(QWidget):
         self.secuencia_usuario.append(color)
         if len(self.secuencia_usuario) == len(self.patron):
             exito = self.secuencia_usuario == self.patron
+            # Envía el resultado al servidor para actualizar XP y Monedas
             self.sio.emit('actualizar_progreso_memoria', {'user': self.uid, 'exito': exito})
-            self.conectar_datos() # Refrescar stats
+            QTimer.singleShot(500, self.conectar_datos)
+
+    def procesar_resultado(self, data):
+        self.puntos = data['stats']['puntos']
+        self.monedas = data['stats']['monedas']
+        self.actualizar_ui()
+        
+        msg = "✅ ¡ACIERTO!" if data.get('success') else "❌ ¡FALLASTE!"
+        color = "#3fb950" if data.get('success') else "#f85149"
+        self.chat.append(f"<b style='color:{color};'>{msg}</b>")
 
     def actualizar_ui(self):
         self.lbl_puntos.setText(f"XP: {self.puntos}")
@@ -182,20 +185,21 @@ class MaravillaGame(QWidget):
         for i, item in enumerate(rank):
             self.lista_rank.addItem(f"{i+1}. {item['user']} - {item['puntos']} XP")
             if i == 0:
-                if self.lbl_lider.text() != f"LÍDER ACTUAL: {item['user']}":
-                    self.signal_nuevo_lider.emit(item['user'])
+                self.signal_nuevo_lider.emit(item['user'])
 
     def efecto_trofeo(self, user):
-        self.lbl_lider.setText(f"LÍDER ACTUAL: {user}")
-        # Efecto visual simple
-        self.trofeo.setStyleSheet("font-size: 90px; color: #f1c40f;")
-        QTimer.singleShot(500, lambda: self.trofeo.setStyleSheet("font-size: 80px; color: white;"))
+        if self.lbl_lider.text() != f"LÍDER ACTUAL: {user}":
+            self.lbl_lider.setText(f"LÍDER ACTUAL: {user}")
+            self.trofeo.setStyleSheet("font-size: 100px; color: #f1c40f;")
+            QTimer.singleShot(600, lambda: self.trofeo.setStyleSheet("font-size: 80px; color: white;"))
 
     def mostrar_especial(self, data):
-        self.chat.append(f"<b style='color:#f1c40f;'>[EVENTO]: {data['msg']}</b>")
+        self.chat.append(f"<br><b style='color:#f1c40f;'>🌟 EVENTO: {data['msg']}</b><br>")
 
     def agregar_mensaje_chat(self, data):
-        self.chat.append(f"<b style='color:#58a6ff;'>{data['user']}:</b> {data['msg']}")
+        user = data.get('user', 'Sistema')
+        msg = data.get('msg', '')
+        self.chat.append(f"<b style='color:#58a6ff;'>{user}:</b> {msg}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
