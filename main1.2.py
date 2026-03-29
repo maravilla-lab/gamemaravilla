@@ -56,8 +56,8 @@ class MaravillaGame(QWidget):
         grid = QGridLayout()
         self.btns = {}
         for i, (n, c) in enumerate([("Rojo","#ff0050"), ("Azul","#00f2ea"), ("Verde","#00ff88"), ("Amarillo","#ffee00")]):
-            b = QPushButton(n); b.setFixedSize(130, 130); b.setEnabled(False)
-            b.setStyleSheet(f"background:{c}; color:black; border-radius:65px; border:5px solid #000; font-weight:bold; font-size:16px;")
+            b = QPushButton(n); b.setFixedSize(110, 110); b.setEnabled(False)
+            b.setStyleSheet(f"background:{c}; color:black; border-radius:55px; border:5px solid #000; font-weight:bold; font-size:16px;")
             b.clicked.connect(lambda _, x=n: self.clic_color(x))
             self.btns[n] = b; grid.addWidget(b, i//2, i%2)
         lay.addLayout(grid)
