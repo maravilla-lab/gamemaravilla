@@ -2,5 +2,4 @@ flask
 flask-socketio
 TikTokLive
 requests
-gunicorn
 eventlet
