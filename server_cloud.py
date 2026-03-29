@@ -1,5 +1,6 @@
 import eventlet
 eventlet.monkey_patch()
+
 import json, os, threading, asyncio, math
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit
@@ -16,7 +17,7 @@ PENALIZACION_FALLO_XP = 20
 PREMIO_COMPARTIR_MONEDAS = 100
 LIMITE_SHARES = 2
 REGALO_INICIAL_MONEDAS = 500
-VALOR_MONEDA_TIKTOK = 100 # 1 Diamante = 100 M
+VALOR_MONEDA_TIKTOK = 100  # 1 Diamante = 100 Monedas Maravilla
 
 usuarios = {} 
 TIKTOK_USER = "portal.maravilla" 
@@ -24,20 +25,29 @@ TIKTOK_USER = "portal.maravilla"
 # --- TRIVIAS COMPLETAS (Incluyendo SOCIOS) ---
 TRIVIAS_MAESTRAS = [
     {"id": 101, "cat": " Diario ⚡", "tit": "Reto TikTok 1", "costo": 10, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Qué color brilla?", "res": "verde", "premio": 1000},
+
     {"id": 102, "cat": " Diario ⚡", "tit": "Reto TikTok 2", "costo": 10, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Cuántos dedos ves?", "res": "3", "premio": 1000},
+
     {"id": 201, "cat": " Niveles ⭐", "tit": "Maestría I", "costo": 50, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Palabra clave?", "res": "maravilla", "premio": 500},
+
     {"id": 202, "cat": " Niveles ⭐", "tit": "Maestría II", "costo": 100, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Qué objeto sale?", "res": "llave", "premio": 800},
+
     {"id": 300, "cat": " Socios 🤝", "tit": "Patrocinio Oro", "costo": 1000, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "Código del Socio:", "res": "maravilla", "premio": 4000, "xp": 4000},
+
+    {"id": 301, "cat": " Socios 🤝", "tit": "Patrocinio Oro", "costo": 1000, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "Código VIP:", "res": "oro777", "premio": 4000, "xp": 4000},
+
     {"id": 1, "cat": " TikTok 📱", "tit": "Portal Rojo", "costo": 10, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Color logo?", "res": "blanco", "premio": 100},
+
     {"id": 2, "cat": " TikTok 📱", "tit": "Efecto Neón", "costo": 15, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Qué brilla?", "res": "ojos", "premio": 150},
+
     {"id": 3, "cat": " TikTok 📱", "tit": "Baile 777", "costo": 20, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Quién sale?", "res": "johnny", "premio": 200},
-    ]
+]
 
 def obtener_ranking():
     sorted_users = sorted(usuarios.items(), key=lambda x: x[1]['puntos'], reverse=True)
     return [{"user": u[1]['nombre'], "puntos": u[1]['puntos'], "monedas": u[1]['monedas']} for u in sorted_users[:5]]
 
-# --- LÓGICA TIKTOK LIVE ---
+# --- LÓGICA TIKTOK ---
 def run_tiktok():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -50,7 +60,8 @@ def run_tiktok():
         if u_id not in usuarios:
             usuarios[u_id] = {"nombre": event.user.nickname, "puntos": 0, "monedas": REGALO_INICIAL_MONEDAS, "shares": 0}
 
-        mapeo = {"1": "Rojo", "2": "Azul", "3": "Verde", "4": "Amarillo", 
+        # MEJORA: Mapeo de teclas 1,2,3,4
+        mapeo = {"1": "Rojo", "2": "Azul", "3": "Verde", "4": "Amarillo",
                  "rojo": "Rojo", "azul": "Azul", "verde": "Verde", "amarillo": "Amarillo"}
         
         if msg in mapeo:
@@ -63,16 +74,26 @@ def run_tiktok():
             m_ganadas = event.gift.info.diamond_count * VALOR_MONEDA_TIKTOK
             if u_id in usuarios:
                 usuarios[u_id]['monedas'] += m_ganadas
-                socketio.emit('evento_especial', {'tipo': 'regalo', 'user': event.user.nickname, 'msg': f"¡Envió {event.gift.info.name}! +{m_ganadas} M", 'monedas': m_ganadas})
+                socketio.emit('evento_especial', {
+                    'tipo': 'regalo',
+                    'user': event.user.nickname,
+                    'msg': f"¡Envió {event.gift.info.name}! +{m_ganadas} M",
+                    'monedas': m_ganadas
+                })
                 socketio.emit('update_ranking', obtener_ranking())
+
+    @client.on("share")
+    async def on_share(event: ShareEvent):
+        u_id = event.user.unique_id
+        if u_id in usuarios and usuarios[u_id]['shares'] < LIMITE_SHARES:
+            usuarios[u_id]['monedas'] += PREMIO_COMPARTIR_MONEDAS
+            usuarios[u_id]['shares'] += 1
+            socketio.emit('notificacion', {'msg': f"¡{usuarios[u_id]['nombre']} +100 M por compartir!"})
 
     async def start():
         try: await client.connect()
         except: pass
     loop.run_until_complete(start())
-# --- RUTAS ---
-@app.route('/')
-def home(): return "Servidor Maravilla Hub ONLINE 🚀"
 
 @app.route('/login', methods=['POST'])
 def login():
