@@ -95,6 +95,10 @@ def run_tiktok():
         except: pass
     loop.run_until_complete(start())
 
+# --- RUTAS ---
+@app.route('/')
+def home(): return "Servidor Maravilla Hub ONLINE 🚀"
+
 @app.route('/login', methods=['POST'])
 def login():
     uid = request.json.get('id', 'Invitado')
