@@ -8,6 +8,7 @@ class MaravillaGame(QWidget):
     signal_ranking = pyqtSignal(list)
     signal_especial = pyqtSignal(dict)
     signal_stats = pyqtSignal(dict)
+    signal_online = pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
@@ -20,11 +21,12 @@ class MaravillaGame(QWidget):
         self.trivias, self.patron, self.secuencia_usuario = [], [], []
         self.sio = socketio.Client(reconnection=True)
         
-        # Conexión de señales
+        # Conexiones de señales
         self.signal_chat.connect(lambda d: self.chat_view.append(f"<b>{d['user']}:</b> {d['msg']}"))
         self.signal_ranking.connect(self.actualizar_ranking_ui)
         self.signal_especial.connect(self.ejecutar_evento_especial)
         self.signal_stats.connect(self.actualizar_datos_locales)
+        self.signal_online.connect(lambda c: self.lbl_online.setText(f"👥 Online: {c}"))
 
         @self.sio.on('evento_especial')
         def on_esp(d): self.signal_especial.emit(d)
@@ -32,45 +34,48 @@ class MaravillaGame(QWidget):
         def on_rank(d): self.signal_ranking.emit(d)
         @self.sio.on('update_stats')
         def on_stats(d): self.signal_stats.emit(d['stats'])
+        @self.sio.on('usuarios_online')
+        def on_online(c): self.signal_online.emit(c)
 
         self.init_ui()
         threading.Thread(target=self.conectar_servidor, daemon=True).start()
         self.conectar_datos()
 
     def init_ui(self):
-        self.setWindowTitle(f"Portal Maravilla - @{self.uid}")
-        self.setFixedSize(450, 750)
+        self.setWindowTitle(f"Maravilla Hub - @{self.uid}")
+        self.setFixedSize(450, 850)
         self.setStyleSheet("background-color: #050505; color: white; font-family: 'Segoe UI';")
         lay = QVBoxLayout(self)
 
-        # Header Ranking
-        self.rank_box = QLabel("🏆 CARGANDO..."); self.rank_box.setFixedHeight(60); self.rank_box.setAlignment(Qt.AlignCenter)
-        self.rank_box.setStyleSheet("background:#111; color:#ffee00; border:1px solid #ffee00; border-radius:10px; font-weight:bold; font-size:14px;")
+        self.rank_box = QLabel("🏆 RANKING"); self.rank_box.setFixedHeight(60); self.rank_box.setAlignment(Qt.AlignCenter)
+        self.rank_box.setStyleSheet("background:#111; color:#ffee00; border:1px solid #ffee00; border-radius:10px; font-weight:bold;")
         lay.addWidget(self.rank_box)
 
-        # Stats bar
-        self.lbl_stats = QLabel(); self.lbl_stats.setStyleSheet("font-size:18px; font-weight:bold; color:#00ffcc;")
+        self.lbl_online = QLabel("👥 Online: 1"); self.lbl_online.setAlignment(Qt.AlignCenter)
+        lay.addWidget(self.lbl_online)
+
+        self.lbl_stats = QLabel(); self.lbl_stats.setStyleSheet("font-size:18px; color:#00ffcc; font-weight:bold;")
         lay.addWidget(self.lbl_stats)
 
-        # Botones de Colores
         grid = QGridLayout()
         self.btns = {}
-        for i, (n, c) in enumerate([("Rojo","#ff0050"), ("Azul","#00f2ea"), ("Verde","#00ff88"), ("Amarillo","#ffee00")]):
-            b = QPushButton(n); b.setFixedSize(110, 110); b.setEnabled(False)
-            b.setStyleSheet(f"background:{c}; color:black; border-radius:55px; border:5px solid #000; font-weight:bold; font-size:16px;")
+        colores = [("Rojo","#ff0050"), ("Azul","#00f2ea"), ("Verde","#00ff88"), ("Amarillo","#ffee00")]
+        for i, (n, c) in enumerate(colores):
+            b = QPushButton(n); b.setFixedSize(130, 130); b.setEnabled(False)
+            b.setStyleSheet(f"background:{c}; color:black; border-radius:65px; border:5px solid #000; font-weight:bold;")
             b.clicked.connect(lambda _, x=n: self.clic_color(x))
             self.btns[n] = b; grid.addWidget(b, i//2, i%2)
         lay.addLayout(grid)
 
         self.btn_gen = QPushButton("GENERAR PATRÓN (ENTER)"); self.btn_gen.setFixedHeight(50)
-        self.btn_gen.setStyleSheet("background:white; color:black; font-weight:bold; border-radius:10px; font-size:14px;")
+        self.btn_gen.setStyleSheet("background:white; color:black; font-weight:bold; border-radius:10px;")
         self.btn_gen.clicked.connect(self.iniciar_secuencia); lay.addWidget(self.btn_gen)
 
-        # Biblioteca de Trivias y Chat
         self.tabs = QTabWidget(); lay.addWidget(self.tabs)
         self.chat_view = QTextEdit(); self.chat_view.setReadOnly(True); self.chat_view.setFixedHeight(120)
         lay.addWidget(self.chat_view)
 
+    # --- CONTROL TECLADO 1,2,3,4 ---
     def keyPressEvent(self, event):
         keys = {Qt.Key_1: "Rojo", Qt.Key_2: "Azul", Qt.Key_3: "Verde", Qt.Key_4: "Amarillo"}
         if event.key() in keys:
@@ -83,8 +88,7 @@ class MaravillaGame(QWidget):
         if d['tipo'] == 'input_externo':
             if self.btns[d['color']].isEnabled(): self.clic_color(d['color'])
         elif d['tipo'] == 'regalo':
-            self.chat_view.append(f"<b style='color:#ff0050;'>🎁 {d['user']} {d['msg']}</b>")
-            if d['user'] == self.uid: self.conectar_datos()
+            self.chat_view.append(f"<b style='color:gold;'>🎁 {d['user']} {d['msg']}</b>")
 
     def clic_color(self, c):
         if not self.muted: QApplication.beep()
@@ -119,26 +123,18 @@ class MaravillaGame(QWidget):
                 btn = QPushButton(f"{it['tit']}\n{it['costo']}M")
                 btn.setFixedSize(115, 65)
                 if cat == " Socios 🤝":
-                    btn.setStyleSheet("background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ffd700,stop:1 #b8860b); color:black; font-weight:bold;")
-                btn.clicked.connect(lambda _, x=it: self.abrir_trivia(x))
+                    btn.setStyleSheet("background:gold; color:black; font-weight:bold; border:2px solid black;")
+                btn.clicked.connect(lambda _, x=it: QDesktopServices.openUrl(QUrl(x['url'])))
                 g.addWidget(btn, i//2, i%2)
             sc.setWidget(w); self.tabs.addTab(sc, cat)
 
-    def abrir_trivia(self, item):
-        if self.monedas >= item['costo']:
-            QDesktopServices.openUrl(QUrl(item['url']))
-            res, ok = QInputDialog.getText(self, "Trivia", item['preg'])
-            if ok and res: # Aquí llamarías a la validación del servidor
-                self.chat_view.append(f"Validando respuesta: {res}...")
-
     def actualizar_ranking_ui(self, r):
         if r:
-            texto = " | ".join([f"{u['user']}: {u['puntos']}XP" for u in r])
-            self.rank_box.setText(f"🏆 TOP 5:\n{texto}")
+            self.rank_box.setText(f"🏆 LÍDER: {r[0]['user']} ({r[0]['puntos']} XP)")
 
     def actualizar_datos_locales(self, stats):
         self.puntos, self.monedas = stats['puntos'], stats['monedas']
-        self.lbl_stats.setText(f"💎 {self.monedas} | XP: {self.puntos} | Nivel: {self.dificultad_actual}")
+        self.lbl_stats.setText(f"💎 {self.monedas} | XP: {self.puntos} | Nv: {self.dificultad_actual}")
 
     def conectar_servidor(self):
         try: self.sio.connect("https://gamemaravilla-production.up.railway.app")
