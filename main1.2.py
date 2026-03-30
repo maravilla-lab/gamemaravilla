@@ -48,7 +48,7 @@ class MaravillaGame(QWidget):
 
     def init_ui(self):
         self.setWindowTitle(f"Maravilla Hub - @{self.uid}")
-        self.setFixedSize(450, 780) [cite: 1]
+        self.setFixedSize(450, 780)
         self.setStyleSheet("QWidget { background-color: #050505; color: white; font-family: 'Segoe UI'; }")
         lay = QVBoxLayout(self)
 
