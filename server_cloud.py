@@ -58,9 +58,6 @@ def get_ranking():
     sorted_u = sorted(usuarios.items(), key=lambda x: x[1]['puntos'], reverse=True)[:5]
     return [{"user": v['nombre'], "puntos": v['puntos']} for k, v in sorted_u]
 
-@app.route('/')
-def home(): return "Servidor Maravilla Hub ONLINE 🚀"
-
 @app.route('/login', methods=['POST'])
 def login():
     uid = request.json.get('id', 'Invitado')
