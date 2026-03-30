@@ -52,7 +52,7 @@ class MaravillaGame(QWidget):
         self.setStyleSheet("QWidget { background-color: #050505; color: white; font-family: 'Segoe UI'; }")
         lay = QVBoxLayout(self)
 
-        # Ranking Top 5 (Dos líneas) [cite: 6]
+        # Ranking Top 5 (Dos líneas)
         self.rank_box = QLabel("🏆 RANKING..."); self.rank_box.setFixedHeight(70); self.rank_box.setAlignment(Qt.AlignCenter)
         self.rank_box.setStyleSheet("background:#111; color:#ffee00; border:2px solid #ffee00; border-radius:10px; font-weight:bold;")
         lay.addWidget(self.rank_box)
@@ -75,7 +75,7 @@ class MaravillaGame(QWidget):
         
         self.tabs = QTabWidget(); lay.addWidget(self.tabs)
         
-        # CHAT Y INPUT [cite: 1]
+        # CHAT Y INPUT
         self.chat_view = QTextEdit(); self.chat_view.setReadOnly(True); self.chat_view.setFixedHeight(100)
         self.chat_in = QLineEdit(); self.chat_in.setPlaceholderText("Escribe aquí..."); self.chat_in.returnPressed.connect(self.enviar_chat)
         lay.addWidget(self.chat_view); lay.addWidget(self.chat_in)
