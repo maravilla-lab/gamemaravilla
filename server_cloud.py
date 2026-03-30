@@ -9,12 +9,12 @@ from TikTokLive.events import CommentEvent, GiftEvent, ShareEvent
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
-# --- CONFIGURACIÓN MAESTRA ---
+# --- CONFIGURACIÓN DE REGLAS ---
 DB_FILE = "base_datos.json"
-NUMERO_DE_LIVE = 1 # Cambia a 4+ después del 3er Live
+NUMERO_DE_LIVE = 1  # Lives 1-3: 500M iniciales. 4+: 100M. 
 REGALO_INICIAL = 500 if NUMERO_DE_LIVE <= 3 else 100
-VALOR_DIAMANTE = 100 # 1 Diamante = 100M
-PREMIO_P, PREMIO_XP, FALLO_XP = 100, 10, 20 # Reglas de Patrón
+VALOR_DIAMANTE = 100
+PREMIO_P, PREMIO_XP, FALLO_XP = 100, 10, 20
 TIKTOK_USER = "portal.maravilla"
 ADMIN_ID = "portal.maravilla"
 
@@ -32,12 +32,17 @@ def guardar_db():
 
 cargar_db()
 
-# --- BIBLIOTECA DE TRIVIAS (No simplificada) ---
+# --- BIBLIOTECA COMPLETA DE TRIVIAS ---
 TRIVIAS_MAESTRAS = [
-    {"id": 101, "cat": " Diario ⚡", "tit": "Reto TikTok 1", "costo": 10, "url": "link_a_tu_perfil", "preg": "¿Color de mi camisa?", "res": "verde", "premio": 1000, "xp": 500},
-    {"id": 102, "cat": " Diario ⚡", "tit": "Reto TikTok 2", "costo": 10, "url": "link_a_tu_perfil", "preg": "¿Cuántos dedos?", "res": "3", "premio": 1000, "xp": 500},
-    {"id": 201, "cat": " Niveles ⭐", "tit": "Maestría I", "costo": 50, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Palabra clave?", "res": "maravilla", "premio": 500},
-    {"id": 202, "cat": " Niveles ⭐", "tit": "Maestría II", "costo": 100, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Qué objeto sale?", "res": "llave", "premio": 800},
+    {"id": 101, "cat": " Diario ⚡", "tit": "Reto TikTok 1", "costo": 10, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Qué color brilla?", "res": "verde", "premio": 1000}, [cite: 4]
+    {"id": 102, "cat": " Diario ⚡", "tit": "Reto TikTok 2", "costo": 10, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Cuántos dedos ves?", "res": "3", "premio": 1000}, [cite: 4]
+    {"id": 201, "cat": " Niveles ⭐", "tit": "Maestría I", "costo": 50, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Palabra clave?", "res": "maravilla", "premio": 500}, [cite: 4]
+    {"id": 202, "cat": " Niveles ⭐", "tit": "Maestría II", "costo": 100, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Qué objeto sale?", "res": "llave", "premio": 800}, [cite: 4]
+    {"id": 1, "cat": " TikTok 📱", "tit": "Portal Rojo", "costo": 10, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Color logo?", "res": "blanco", "premio": 100}, [cite: 5]
+    {"id": 2, "cat": " TikTok 📱", "tit": "Efecto Neón", "costo": 15, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Qué brilla?", "res": "ojos", "premio": 150}, [cite: 5]
+    {"id": 3, "cat": " TikTok 📱", "tit": "Baile 777", "costo": 20, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Quién sale?", "res": "johnny", "premio": 200}, [cite: 5]
+    {"id": 300, "cat": " Socios 🤝", "tit": "Patrocinio Oro", "costo": 1000, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "Código del Socio:", "res": "maravilla", "premio": 4000, "xp": 4000}, [cite: 5]
+    # Nuevas trivias de socios 
     {"id": 301, "cat": " Socios 🤝", "tit": "Misión Recon", "costo": 200, "url": "perfil_socio_1", "preg": "¿Color de silla?", "res": "azul", "premio": 800, "xp": 1000},
     {"id": 302, "cat": " Socios 🤝", "tit": "Código Oro", "costo": 500, "url": "perfil_socio_2", "preg": "¿Código bio?", "res": "maravilla2026", "premio": 1500, "xp": 2000},
     {"id": 303, "cat": " Socios 🤝", "tit": "Detective", "costo": 300, "url": "perfil_socio_3", "preg": "¿Animal logo?", "res": "leon", "premio": 1000, "xp": 1200},
@@ -89,6 +94,10 @@ def verificar(data):
             emit('resultado_trivia', {'success': True, 'id_completado': tid, 'stats': usuarios[u], 'dificultad': get_dificultad(usuarios[u]['puntos'])}, room=request.sid)
             emit('update_ranking', get_ranking(), broadcast=True)
 
+@socketio.on('enviar_mensaje')
+def handle_msg(data):
+    emit('recibir_mensaje', data, broadcast=True)
+
 def run_tiktok():
     loop = asyncio.new_event_loop(); asyncio.set_event_loop(loop)
     client = TikTokLiveClient(unique_id=TIKTOK_USER)
@@ -100,25 +109,32 @@ def run_tiktok():
         if u_id not in usuarios:
             usuarios[u_id] = {"nombre": event.user.nickname, "puntos": 0, "monedas": REGALO_INICIAL, "logros": [], "shares": 0}
         
-        # Lógica de Comandos !mision
+        # COMANDO !MISION 
         if msg.startswith("!mision"):
             try:
-                parts = msg.split() # !mision 101 verde
+                parts = msg.split()
                 socketio.emit('comando_mision', {'user': u_id, 'tid': int(parts[1]), 'res': parts[2]})
             except: pass
 
-        # Mapeo 1,2,3,4
+        # COMANDO RECARGA ADMIN 
+        if u_id == ADMIN_ID and msg.startswith("!recarga"):
+            try:
+                parts = msg.split()
+                target = parts[1].replace("@", "")
+                monto = int(parts[2])
+                if target in usuarios: usuarios[target]['monedas'] += monto; guardar_db()
+            except: pass
+
         m = {"1":"rojo","2":"azul","3":"verde","4":"amarillo","rojo":"rojo","azul":"azul","verde":"verde","amarillo":"amarillo"}
         if msg in m: socketio.emit('intento_usuario', {'user': u_id, 'color': m[msg]})
 
     @client.on("gift")
-    async def on_gift(event: GiftEvent):
-        if not event.streaking:
-            u_id = event.user.unique_id
-            if u_id in usuarios:
-                m_ganadas = event.gift.info.diamond_count * VALOR_DIAMANTE
-                usuarios[u_id]['monedas'] += m_ganadas; guardar_db()
-                socketio.emit('evento_especial', {'tipo': 'regalo', 'user': event.user.nickname, 'msg': f"envió {event.gift.info.name} +{m_ganadas}M"})
+    async def on_gift(event):
+        u_id = event.user.unique_id
+        if u_id in usuarios:
+            m_ganadas = event.gift.info.diamond_count * 100
+            usuarios[u_id]['monedas'] += m_ganadas; guardar_db()
+            socketio.emit('evento_especial', {'tipo': 'regalo', 'user': event.user.nickname, 'msg': f"envió {event.gift.info.name} +{m_ganadas}M"})
 
     async def start():
         try: await client.connect()
