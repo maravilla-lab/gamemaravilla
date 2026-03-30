@@ -113,7 +113,7 @@ class MaravillaGame(QWidget):
             sc.setWidget(w); self.tabs.addTab(sc, cat)
         if curr >= 0: self.tabs.setCurrentIndex(curr)
 
-    def actualizar_ranking_ui(self, r): [cite: 6]
+    def actualizar_ranking_ui(self, r):
         if not r: return
         l1 = "🏆 " + " | ".join([f"#{i+1} {e['user']}({e['puntos']})" for i, e in enumerate(r[:2])])
         l2 = " | ".join([f"#{i+3} {e['user']}({e['puntos']})" for i, e in enumerate(r[2:])])
