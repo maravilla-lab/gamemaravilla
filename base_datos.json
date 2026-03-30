@@ -1,1 +1,9 @@
-{}
+{
+    "portal.maravilla": {
+        "nombre": "Johnny Maravilla",
+        "puntos": 0,
+        "monedas": 1000,
+        "shares": 0,
+        "logros": []
+    }
+}
