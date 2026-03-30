@@ -1,151 +1,148 @@
-import sys, random, requests, socketio, threading
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
+import eventlet
+eventlet.monkey_patch()
+import json, os, threading, asyncio, math
+from flask import Flask, request, jsonify
+from flask_socketio import SocketIO, emit
+from TikTokLive import TikTokLiveClient
+from TikTokLive.events import CommentEvent, GiftEvent
 
-class MaravillaGame(QWidget):
-    signal_resultado = pyqtSignal(dict)
-    signal_chat = pyqtSignal(dict)
-    signal_ranking = pyqtSignal(list)
-    signal_especial = pyqtSignal(dict)
+app = Flask(__name__)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
-    def __init__(self):
-        super().__init__()
-        self.muted = False
-        self.uid, ok = QInputDialog.getText(self, "Maravilla Hub", "Usuario:")
-        if not ok or not self.uid: self.uid = "Invitado"
+DB_FILE = "base_datos.json"
+NUMERO_DE_LIVE = 1 # 1-3: 500M / 4+: 100M
+REGALO_INICIAL = 500 if NUMERO_DE_LIVE <= 3 else 100
+VALOR_DIAMANTE = 100
+PREMIO_P, PREMIO_XP, FALLO_XP = 100, 10, 20
+TIKTOK_USER = "portal.maravilla"
+ADMIN_ID = "portal.maravilla"
+
+usuarios = {}
+
+def cargar_db():
+    global usuarios
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE, "r", encoding='utf-8') as f:
+            usuarios = json.load(f)
+
+def guardar_db():
+    with open(DB_FILE, "w", encoding='utf-8') as f:
+        json.dump(usuarios, f, indent=4)
+
+cargar_db()
+
+TRIVIAS_MAESTRAS = [
+    {"id": 101, "cat": " Diario ⚡", "tit": "Reto TikTok 1", "costo": 10, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Qué color brilla?", "res": "verde", "premio": 1000},
+    {"id": 102, "cat": " Diario ⚡", "tit": "Reto TikTok 2", "costo": 10, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Cuántos dedos ves?", "res": "3", "premio": 1000},
+    {"id": 201, "cat": " Niveles ⭐", "tit": "Maestría I", "costo": 50, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Palabra clave?", "res": "maravilla", "premio": 500},
+    {"id": 202, "cat": " Niveles ⭐", "tit": "Maestría II", "costo": 100, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Qué objeto sale?", "res": "llave", "premio": 800},
+    {"id": 300, "cat": " Socios 🤝", "tit": "Patrocinio Oro", "costo": 1000, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "Código del Socio:", "res": "maravilla", "premio": 4000, "xp": 4000},
+    {"id": 301, "cat": " Socios 🤝", "tit": "Misión Recon", "costo": 200, "url": "perfil_socio_1", "preg": "¿Silla?", "res": "azul", "premio": 800, "xp": 1000},
+    {"id": 302, "cat": " Socios 🤝", "tit": "Código Oro", "costo": 500, "url": "perfil_socio_2", "preg": "¿Bio?", "res": "maravilla2026", "premio": 1500, "xp": 2000}
+    {"id": 303, "cat": " Socios 🤝", "tit": "Detective", "costo": 300, "url": "perfil_socio_3", "preg": "¿Animal logo?", "res": "leon", "premio": 1000, "xp": 1200},
+    {"id": 304, "cat": " Socios 🤝", "tit": "Socio VIP", "costo": 1500, "url": "perfil_socio_4", "preg": "¿Palabra biografía?", "res": "exito", "premio": 5000, "xp": 6000},
+    {"id": 305, "cat": " Socios 🤝", "tit": "Explorador", "costo": 800, "url": "perfil_socio_5", "preg": "¿Calificación?", "res": "5", "premio": 2500, "xp": 3000}
+    {"id": 1, "cat": " TikTok 📱", "tit": "Portal Rojo", "costo": 10, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Color logo?", "res": "blanco", "premio": 100},
+    {"id": 2, "cat": " TikTok 📱", "tit": "Efecto Neón", "costo": 15, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Qué brilla?", "res": "ojos", "premio": 150},
+    {"id": 3, "cat": " TikTok 📱", "tit": "Baile 777", "costo": 20, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Quién sale?", "res": "johnny", "premio": 200},
+
+]
+
+@app.route('/')
+def home(): return "Servidor Maravilla Hub ONLINE 🚀"
+
+@app.route('/login', methods=['POST'])
+def login():
+    uid = request.json.get('id', 'Invitado')
+    if uid not in usuarios:
+        usuarios[uid] = {"nombre": uid, "puntos": 0, "monedas": REGALO_INICIAL, "logros": [], "shares": 0}
+        guardar_db()
+    
+    xp = usuarios[uid]['puntos']
+    diff = 3 + int(math.log10(xp)) if xp >= 10 else 3
+    
+    sorted_u = sorted(usuarios.items(), key=lambda x: x[1]['puntos'], reverse=True)[:5]
+    ranking = [{"user": v['nombre'], "puntos": v['puntos']} for k, v in sorted_u]
+    
+    return jsonify({"stats": usuarios[uid], "trivias": TRIVIAS_MAESTRAS, "ranking": ranking, "dificultad": diff})
+
+@socketio.on('actualizar_progreso_memoria')
+def progreso(data):
+    u = data.get('user')
+    if u in usuarios:
+        if data.get('exito'):
+            usuarios[u]['monedas'] += PREMIO_P; usuarios[u]['puntos'] += PREMIO_XP
+        else:
+            usuarios[u]['puntos'] = max(0, usuarios[u]['puntos'] - FALLO_XP)
+        guardar_db()
+        xp = usuarios[u]['puntos']
+        diff = 3 + int(math.log10(xp)) if xp >= 10 else 3
+        emit('update_stats', {'stats': usuarios[u], 'dificultad': diff}, room=request.sid)
         
-        self.puntos, self.monedas, self.dificultad_actual = 0, 0, 3
-        self.trivias, self.logros_usuario, self.patron, self.secuencia_usuario = [], [], [], []
-        self.sio = socketio.Client(reconnection=True)
+        sorted_u = sorted(usuarios.items(), key=lambda x: x[1]['puntos'], reverse=True)[:5]
+        emit('update_ranking', [{"user": v['nombre'], "puntos": v['puntos']} for k, v in sorted_u], broadcast=True)
+
+@socketio.on('verificar_trivia')
+def verificar(data):
+    u, tid, res = data['user'], data['trivia_id'], data['respuesta'].lower().strip()
+    t = next((x for x in TRIVIAS_MAESTRAS if x['id'] == tid), None)
+    if t and u in usuarios and res == t['res'] and tid not in usuarios[u]['logros']:
+        if usuarios[u]['monedas'] >= t['costo']:
+            usuarios[u]['monedas'] = (usuarios[u]['monedas'] - t['costo']) + t['premio']
+            usuarios[u]['puntos'] += t.get('xp', 500)
+            usuarios[u]['logros'].append(tid)
+            guardar_db()
+            xp = usuarios[u]['puntos']
+            diff = 3 + int(math.log10(xp)) if xp >= 10 else 3
+            emit('resultado_trivia', {'success': True, 'id_completado': tid, 'stats': usuarios[u], 'dificultad': diff}, room=request.sid)
+            sorted_u = sorted(usuarios.items(), key=lambda x: x[1]['puntos'], reverse=True)[:5]
+            emit('update_ranking', [{"user": v['nombre'], "puntos": v['puntos']} for k, v in sorted_u], broadcast=True)
+
+@socketio.on('enviar_mensaje')
+def handle_msg(data):
+    emit('recibir_mensaje', data, broadcast=True)
+
+def run_tiktok():
+    loop = asyncio.new_event_loop(); asyncio.set_event_loop(loop)
+    client = TikTokLiveClient(unique_id=TIKTOK_USER)
+
+    @client.on("comment")
+    async def on_comment(event: CommentEvent):
+        msg, u_id = event.comment.lower().strip(), event.user.unique_id
+        if u_id not in usuarios:
+            usuarios[u_id] = {"nombre": event.user.nickname, "puntos": 0, "monedas": REGALO_INICIAL, "logros": [], "shares": 0}
+            guardar_db()
         
-        self.signal_resultado.connect(self.procesar_resultado)
-        self.signal_chat.connect(self.agregar_mensaje_chat)
-        self.signal_ranking.connect(self.actualizar_ranking_ui)
-        self.signal_especial.connect(lambda d: self.chat_view.append(f"<b style='color:gold;'>🎁 {d['user']} {d['msg']}</b>"))
-
-        @self.sio.on('update_stats')
-        def on_s(d): self.signal_resultado.emit(d)
-        @self.sio.on('resultado_trivia')
-        def on_tr(d): self.signal_resultado.emit(d)
-        @self.sio.on('update_ranking')
-        def on_rk(d): self.signal_ranking.emit(d)
-        @self.sio.on('recibir_mensaje')
-        def on_msg(d): self.signal_chat.emit(d)
-        @self.sio.on('evento_especial')
-        def on_e(d): self.signal_especial.emit(d)
-        @self.sio.on('comando_mision')
-        def on_cmd(d): self.sio.emit('verificar_trivia', {'user': d['user'], 'trivia_id': d['tid'], 'respuesta': d['res']})
-
-        self.init_ui()
-        threading.Thread(target=self.conectar_servidor, daemon=True).start()
-        self.conectar_datos()
-
-        self.timer_rotar = QTimer()
-        self.timer_rotar.timeout.connect(self.rotar_biblioteca)
-        self.timer_rotar.start(20000)
-
-    def init_ui(self):
-        self.setWindowTitle("Maravilla Hub")
-        self.setFixedSize(450, 780)
-        self.setStyleSheet("QWidget { background-color: #050505; color: white; font-family: 'Segoe UI'; }")
-        lay = QVBoxLayout(self)
-
-        # Ranking 5 usuarios (Tu lógica de dos líneas)
-        self.rank_box = QLabel("🏆 RANKING..."); self.rank_box.setFixedHeight(70); self.rank_box.setAlignment(Qt.AlignCenter)
-        self.rank_box.setStyleSheet("background:#111; color:#ffee00; border:2px solid #ffee00; border-radius:10px; font-weight:bold; font-size:10pt;")
-        lay.addWidget(self.rank_box)
-
-        header = QFrame(); header.setFixedHeight(50); header.setStyleSheet("background:#111; border:1px solid #00ffcc; border-radius:10px;")
-        h_lay = QHBoxLayout(header)
-        self.lbl_stats = QLabel(); h_lay.addWidget(self.lbl_stats)
-        self.btn_mute = QPushButton("🔊"); self.btn_mute.setFixedSize(35, 30); self.btn_mute.clicked.connect(self.toggle_mute); h_lay.addWidget(self.btn_mute)
-        btn_pay = QPushButton("💲 RECARGAR"); btn_pay.setStyleSheet("background:#ff0050; font-weight:bold; color:white;"); btn_pay.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://PayPal.me/JohnnyOrregoVallejo"))); h_lay.addWidget(btn_pay)
-        lay.addWidget(header)
-
-        grid = QGridLayout()
-        self.btns = {}
-        for i, (n, c) in enumerate([("Rojo","#ff0050"), ("Azul","#00f2ea"), ("Verde","#00ff88"), ("Amarillo","#ffee00")]):
-            b = QPushButton(n); b.setFixedSize(110, 110); b.setEnabled(False); b.setStyleSheet(f"background:{c}; color:black; border-radius:55px; border:4px solid #000; font-weight:bold;")
-            b.clicked.connect(lambda _, x=n: self.clic_color(x)); self.btns[n] = b; grid.addWidget(b, i//2, i%2)
-        lay.addLayout(grid)
-
-        self.btn_gen = QPushButton("GENERAR PATRÓN (ENTER)"); self.btn_gen.setFixedHeight(45); self.btn_gen.clicked.connect(self.iniciar_secuencia); lay.addWidget(self.btn_gen)
+        if msg.startswith("!mision"):
+            try:
+                p = msg.split()
+                socketio.emit('comando_mision', {'user': u_id, 'tid': int(p[1]), 'res': p[2]})
+            except: pass
         
-        self.tabs = QTabWidget(); lay.addWidget(self.tabs)
-        
-        self.chat_view = QTextEdit(); self.chat_view.setReadOnly(True); self.chat_view.setFixedHeight(100)
-        self.chat_in = QLineEdit(); self.chat_in.setPlaceholderText("Escribe al chat aquí..."); self.chat_in.returnPressed.connect(self.enviar_chat)
-        lay.addWidget(self.chat_view); lay.addWidget(self.chat_in)
+        if u_id == ADMIN_ID and msg.startswith("!recarga"):
+            try:
+                p = msg.split()
+                target = p[1].replace("@", "")
+                if target in usuarios: usuarios[target]['monedas'] += int(p[2]); guardar_db()
+            except: pass
 
-    def rotar_biblioteca(self):
-        if self.tabs.count() > 0:
-            idx = (self.tabs.currentIndex() + 1) % self.tabs.count()
-            self.tabs.setCurrentIndex(idx)
+        m = {"1":"rojo","2":"azul","3":"verde","4":"amarillo","rojo":"rojo","azul":"azul","verde":"verde","amarillo":"amarillo"}
+        if msg in m: socketio.emit('intento_usuario', {'user': u_id, 'color': m[msg]})
 
-    def clic_color(self, c):
-        if not self.muted: QApplication.beep()
-        self.flash(c); self.secuencia_usuario.append(c)
-        if self.secuencia_usuario[-1].lower() != self.patron[len(self.secuencia_usuario)-1].lower():
-            self.sio.emit('actualizar_progreso_memoria', {'user': self.uid, 'exito': False}); self.reset()
-        elif len(self.secuencia_usuario) == len(self.patron):
-            self.sio.emit('actualizar_progreso_memoria', {'user': self.uid, 'exito': True}); self.reset()
+    @client.on("gift")
+    async def on_gift(event: GiftEvent):
+        if not event.streaking:
+            u_id = event.user.unique_id
+            if u_id in usuarios:
+                m = event.gift.info.diamond_count * VALOR_DIAMANTE
+                usuarios[u_id]['monedas'] += m; guardar_db()
+                socketio.emit('evento_especial', {'tipo': 'regalo', 'user': event.user.nickname, 'msg': f"envió {event.gift.info.name} +{m}M"})
 
-    def procesar_resultado(self, d):
-        if 'stats' in d:
-            self.puntos, self.monedas = d['stats']['puntos'], d['stats']['monedas']
-            self.logros_usuario = d['stats'].get('logros', [])
-            self.dificultad_actual = d.get('dificultad', self.dificultad_actual)
-            self.lbl_stats.setText(f"💎 {self.monedas} | XP: {self.puntos} | Nv: {self.dificultad_actual}")
-            self.render_biblioteca()
-
-    def render_biblioteca(self):
-        curr = self.tabs.currentIndex()
-        self.tabs.clear()
-        cats = sorted(list(set([x['cat'] for x in self.trivias])))
-        for cat in cats:
-            sc = QScrollArea(); sc.setWidgetResizable(True); w = QWidget(); g = QGridLayout(w); w.setStyleSheet("background:#000;")
-            for i, it in enumerate([x for x in self.trivias if x['cat'] == cat]):
-                ya = it['id'] in self.logros_usuario
-                btn = QPushButton(f"{it['tit']}\n[OK]" if ya else f"{it['tit']}\n{it['costo']}M")
-                btn.setFixedSize(110, 55); btn.setStyleSheet(f"background:{'#004422' if ya else '#111'}; color:white; border:1px solid #00ff88; border-radius:5px;")
-                g.addWidget(btn, i//2, i%2)
-            sc.setWidget(w); self.tabs.addTab(sc, cat)
-        if curr >= 0: self.tabs.setCurrentIndex(curr)
-
-    def actualizar_ranking_ui(self, r):
-        if not r: return
-        l1 = "🏆 " + " | ".join([f"#{i+1} {e['user']}({e['puntos']})" for i, e in enumerate(r[:2])])
-        l2 = " | ".join([f"#{i+3} {e['user']}({e['puntos']})" for i, e in enumerate(r[2:])])
-        self.rank_box.setText(f"{l1}\n{l2}")
-
-    def enviar_chat(self):
-        if self.chat_in.text() and self.sio.connected:
-            self.sio.emit('enviar_mensaje', {'user': self.uid, 'msg': self.chat_in.text()})
-            self.chat_in.clear()
-
-    def agregar_mensaje_chat(self, d): self.chat_view.append(f"<b>{d['user']}:</b> {d['msg']}")
-    def toggle_mute(self): self.muted = not self.muted; self.btn_mute.setText("🔇" if self.muted else "🔊")
-    def flash(self, c):
-        orig = self.btns[c].styleSheet()
-        self.btns[c].setStyleSheet(orig.replace("border:4px solid #000", "border:4px solid white"))
-        QTimer.singleShot(250, lambda: self.btns[c].setStyleSheet(orig))
-    def conectar_servidor(self): 
-        try: self.sio.connect("https://gamemaravilla-production.up.railway.app")
+    async def start():
+        try: await client.connect()
         except: pass
-    def conectar_datos(self):
-        try:
-            r = requests.post("https://gamemaravilla-production.up.railway.app/login", json={"id": self.uid}, timeout=5).json()
-            self.trivias = r.get('trivias', [])
-            self.procesar_resultado(r)
-            self.actualizar_ranking_ui(r.get('ranking', []))
-        except: pass
-    def iniciar_secuencia(self):
-        self.btn_gen.setEnabled(False); self.patron = [random.choice(list(self.btns.keys())) for _ in range(self.dificultad_actual)]
-        self.secuencia_usuario = []
-        for i, color in enumerate(self.patron): QTimer.singleShot((i+1)*600, lambda x=color: self.flash(x))
-        QTimer.singleShot((len(self.patron)+1)*600, lambda: [b.setEnabled(True) for b in self.btns.values()])
-    def reset(self): [b.setEnabled(False) for b in self.btns.values()]; self.btn_gen.setEnabled(True)
+    loop.run_until_complete(start())
 
 if __name__ == '__main__':
-    app = QApplication(sys.argv); ex = MaravillaGame(); ex.show(); sys.exit(app.exec_())
+    threading.Thread(target=run_tiktok, daemon=True).start()
+    socketio.run(app, host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
