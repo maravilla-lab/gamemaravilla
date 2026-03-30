@@ -5,7 +5,7 @@ from PyQt5.QtGui import *
 
 class MaravillaGame(QWidget):
     signal_resultado = pyqtSignal(dict)
-    signal_chat = pyqtSignal(dict
+    signal_chat = pyqtSignal(dict)
     signal_ranking = pyqtSignal(list)
     signal_especial = pyqtSignal(dict)
 
