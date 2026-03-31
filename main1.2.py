@@ -4,10 +4,9 @@ from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 
 class MaravillaGame(QWidget):
-    signal_resultado = pyqtSignal(dict)
-    signal_chat = pyqtSignal(dict)
-    signal_ranking = pyqtSignal(list)
-    signal_especial = pyqtSignal(dict)
+    signal_res = pyqtSignal(dict)
+    signal_rank = pyqtSignal(list)
+    signal_esp = pyqtSignal(dict)
 
     def __init__(self):
         super().__init__()
@@ -19,34 +18,33 @@ class MaravillaGame(QWidget):
         self.trivias, self.logros_usuario, self.patron, self.secuencia_usuario = [], [], [], []
         self.sio = socketio.Client(reconnection=True)
         
-        self.signal_resultado.connect(self.procesar_resultado)
-        self.signal_chat.connect(self.agregar_mensaje_chat)
-        self.signal_ranking.connect(self.actualizar_ranking_ui)
-        self.signal_especial.connect(lambda d: self.chat_view.append(f"<b style='color:gold;'>🎁 {d['user']} {d['msg']}</b>"))
+        self.signal_res.connect(self.procesar_resultado)
+        self.signal_rank.connect(self.actualizar_ranking_ui)
+        self.signal_esp.connect(lambda d: self.chat_view.append(f"<b style='color:#ff0050;'>⚠️ {d['user']} {d['msg']}</b>"))
 
         @self.sio.on('update_stats')
-        def on_s(d): self.signal_resultado.emit(d)
+        def on_s(d): self.signal_res.emit(d)
         @self.sio.on('resultado_trivia')
-        def on_tr(d): self.signal_resultado.emit(d)
+        def on_tr(d): self.signal_res.emit(d)
         @self.sio.on('update_ranking')
-        def on_rk(d): self.signal_ranking.emit(d)
-        @self.sio.on('recibir_mensaje')
-        def on_msg(d): self.signal_chat.emit(d)
+        def on_rk(d): self.signal_rank.emit(d)
+        @self.sio.on('toggle_auto')
+        def on_auto(d): 
+            if d['active']: self.timer_auto.start(15000)
+            else: self.timer_auto.stop()
         @self.sio.on('evento_especial')
-        def on_e(d): self.signal_especial.emit(d)
+        def on_e(d): self.signal_esp.emit(d)
         @self.sio.on('comando_mision')
-        def on_cmd(d): self.sio.emit('verificar_trivia', {'user': d['user'], 'trivia_id': d['tid'], 'respuesta': d['res']})
-        @self.sio.on('intento_usuario')
-        def on_int(d):
-            if d['user'] == self.uid: self.clic_color(d['color'])
+        def on_m(d): self.chat_view.append(f"Misión {d['tid']} activada para {d['user']}. Link enviado.")
+        @self.sio.on('validar_respuesta_oculta')
+        def on_v(d): self.sio.emit('verificar_trivia', {'user': d['user'], 'trivia_id': d['tid'], 'respuesta': d['res']})
 
         self.init_ui()
         threading.Thread(target=self.conectar_servidor, daemon=True).start()
         self.conectar_datos()
 
-        self.timer_rotar = QTimer()
-        self.timer_rotar.timeout.connect(self.rotar_biblioteca)
-        self.timer_rotar.start(20000)
+        self.timer_rotar = QTimer(); self.timer_rotar.timeout.connect(self.rotar_biblioteca); self.timer_rotar.start(20000)
+        self.timer_auto = QTimer(); self.timer_auto.timeout.connect(self.iniciar_secuencia)
 
     def init_ui(self):
         self.setWindowTitle("Maravilla Hub Pro")
@@ -54,8 +52,9 @@ class MaravillaGame(QWidget):
         self.setStyleSheet("QWidget { background-color: #050505; color: white; font-family: 'Segoe UI'; }")
         lay = QVBoxLayout(self)
 
+        # Ranking 5 usuarios (Línea 1: #1 y #2 | Línea 2: #3, #4, #5)
         self.rank_box = QLabel("🏆 RANKING..."); self.rank_box.setFixedHeight(75); self.rank_box.setAlignment(Qt.AlignCenter)
-        self.rank_box.setStyleSheet("background:#111; color:#ffee00; border:2px solid #ffee00; border-radius:10px; font-weight:bold; font-size:10pt;")
+        self.rank_box.setStyleSheet("background:#111; color:#ffee00; border:2px solid #ffee00; border-radius:10px; font-weight:bold;")
         lay.addWidget(self.rank_box)
 
         header = QFrame(); header.setFixedHeight(50); header.setStyleSheet("background:#111; border:1px solid #00ffcc; border-radius:10px;")
@@ -74,41 +73,32 @@ class MaravillaGame(QWidget):
 
         self.btn_gen = QPushButton("GENERAR PATRÓN (ENTER)"); self.btn_gen.setFixedHeight(45); self.btn_gen.clicked.connect(self.iniciar_secuencia); lay.addWidget(self.btn_gen)
         
-        self.tabs = QTabWidget(); lay.addWidget(self.tabs)
+        # PESTAÑAS NEGRAS / LETRAS BLANCAS
+        self.tabs = QTabWidget()
+        self.tabs.setStyleSheet("QTabWidget::pane { border: 1px solid #333; } QTabBar::tab { background: #000; color: #fff; padding: 10px; border: 1px solid #222; } QTabBar::tab:selected { background: #111; border-bottom: 2px solid #00ffcc; }")
+        lay.addWidget(self.tabs)
         
-        self.chat_view = QTextEdit(); self.chat_view.setReadOnly(True); self.chat_view.setFixedHeight(100)
-        self.chat_in = QLineEdit(); self.chat_in.setPlaceholderText("Escribe al chat..."); self.chat_in.returnPressed.connect(self.enviar_chat)
-        lay.addWidget(self.chat_view); lay.addWidget(self.chat_in)
+        self.chat_view = QTextEdit(); self.chat_view.setReadOnly(True); self.chat_view.setFixedHeight(100); lay.addWidget(self.chat_view)
 
     def rotar_biblioteca(self):
         if self.tabs.count() > 0: self.tabs.setCurrentIndex((self.tabs.currentIndex() + 1) % self.tabs.count())
-
-    def clic_color(self, c):
-        if not self.muted: QApplication.beep()
-        self.flash(c.capitalize()); self.secuencia_usuario.append(c.capitalize())
-        if self.secuencia_usuario[-1].lower() != self.patron[len(self.secuencia_usuario)-1].lower():
-            self.sio.emit('actualizar_progreso_memoria', {'user': self.uid, 'exito': False}); self.reset()
-        elif len(self.secuencia_usuario) == len(self.patron):
-            self.sio.emit('actualizar_progreso_memoria', {'user': self.uid, 'exito': True}); self.reset()
 
     def procesar_resultado(self, d):
         if 'stats' in d:
             self.puntos, self.monedas = d['stats']['puntos'], d['stats']['monedas']
             self.logros_usuario = d['stats'].get('logros', [])
             self.dificultad_actual = d.get('dificultad', self.dificultad_actual)
-            self.lbl_stats.setText(f"💎 {self.monedas} | XP: {self.puntos} | Nv: {self.dificultad_actual}")
-            self.render_biblioteca()
+            self.lbl_stats.setText(f"💎 {self.monedas} | XP: {self.puntos} | Nv: {self.dificultad_actual}"); self.render_biblioteca()
 
     def render_biblioteca(self):
-        curr = self.tabs.currentIndex()
-        self.tabs.clear()
+        curr = self.tabs.currentIndex(); self.tabs.clear()
         cats = sorted(list(set([x['cat'] for x in self.trivias])))
         for cat in cats:
             sc = QScrollArea(); sc.setWidgetResizable(True); w = QWidget(); g = QGridLayout(w); w.setStyleSheet("background:#000;")
             for i, it in enumerate([x for x in self.trivias if x['cat'] == cat]):
                 ya = it['id'] in self.logros_usuario
-                btn = QPushButton(f"{it['tit']}\n[OK]" if ya else f"{it['tit']}\n{it['costo']}M")
-                btn.setFixedSize(110, 55); btn.setStyleSheet(f"background:{'#004422' if ya else '#111'}; color:white; border:1px solid #00ff88; border-radius:5px;")
+                btn = QPushButton(f"ID:{it['id']}\n{it['tit']}\n[OK]" if ya else f"ID:{it['id']}\n{it['tit']}\n{it['costo']}M")
+                btn.setFixedSize(110, 65); btn.setStyleSheet(f"background:{'#004422' if ya else '#111'}; color:white; border:1px solid #00ff88; border-radius:5px;")
                 g.addWidget(btn, i//2, i%2)
             sc.setWidget(w); self.tabs.addTab(sc, cat)
         if curr >= 0: self.tabs.setCurrentIndex(curr)
@@ -119,17 +109,25 @@ class MaravillaGame(QWidget):
         l2 = " | ".join([f"#{i+3} {e['user']}({e['puntos']})" for i, e in enumerate(r[2:])])
         self.rank_box.setText(f"{l1}\n{l2}")
 
-    def enviar_chat(self):
-        if self.chat_in.text() and self.sio.connected:
-            self.sio.emit('enviar_mensaje', {'user': self.uid, 'msg': self.chat_in.text()}); self.chat_in.clear()
+    def clic_color(self, c):
+        if not self.muted: QApplication.beep()
+        self.flash(c.capitalize()); self.secuencia_usuario.append(c.capitalize())
+        if self.secuencia_usuario[-1].lower() != self.patron[len(self.secuencia_usuario)-1].lower():
+            self.sio.emit('actualizar_progreso_memoria', {'user': self.uid, 'exito': False}); self.reset()
+        elif len(self.secuencia_usuario) == len(self.patron):
+            self.sio.emit('actualizar_progreso_memoria', {'user': self.uid, 'exito': True}); self.reset()
 
-    def agregar_mensaje_chat(self, d): self.chat_view.append(f"<b>{d['user']}:</b> {d['msg']}")
-    def toggle_mute(self): self.muted = not self.muted; self.btn_mute.setText("🔇" if self.muted else "🔊")
     def flash(self, c):
-        if c.capitalize() not in self.btns: return
-        b = self.btns[c.capitalize()]; orig = b.styleSheet()
+        if c not in self.btns: return
+        b = self.btns[c]; orig = b.styleSheet()
         b.setStyleSheet(orig.replace("border:4px solid #000", "border:4px solid white"))
         QTimer.singleShot(250, lambda: b.setStyleSheet(orig))
+
+    def iniciar_secuencia(self):
+        self.btn_gen.setEnabled(False); self.patron = [random.choice(list(self.btns.keys())) for _ in range(self.dificultad_actual)]
+        self.secuencia_usuario = []
+        for i, color in enumerate(self.patron): QTimer.singleShot((i+1)*600, lambda x=color: self.flash(x))
+        QTimer.singleShot((len(self.patron)+1)*600, lambda: [b.setEnabled(True) for b in self.btns.values()])
 
     def conectar_servidor(self): 
         try: self.sio.connect("https://gamemaravilla-production.up.railway.app")
@@ -138,17 +136,11 @@ class MaravillaGame(QWidget):
     def conectar_datos(self):
         try:
             r = requests.post("https://gamemaravilla-production.up.railway.app/login", json={"id": self.uid}, timeout=5).json()
-            self.trivias = r.get('trivias', [])
-            self.procesar_resultado(r)
-            self.actualizar_ranking_ui(r.get('ranking', []))
+            self.trivias = r.get('trivias', []); self.procesar_resultado(r)
         except: pass
 
-    def iniciar_secuencia(self):
-        self.btn_gen.setEnabled(False); self.patron = [random.choice(list(self.btns.keys())) for _ in range(self.dificultad_actual)]
-        self.secuencia_usuario = []
-        for i, color in enumerate(self.patron): QTimer.singleShot((i+1)*600, lambda x=color: self.flash(x))
-        QTimer.singleShot((len(self.patron)+1)*600, lambda: [b.setEnabled(True) for b in self.btns.values()])
     def reset(self): [b.setEnabled(False) for b in self.btns.values()]; self.btn_gen.setEnabled(True)
+    def toggle_mute(self): self.muted = not self.muted; self.btn_mute.setText("🔇" if self.muted else "🔊")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv); ex = MaravillaGame(); ex.show(); sys.exit(app.exec_())
