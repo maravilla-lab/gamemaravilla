@@ -58,6 +58,10 @@ class MaravillaGame(QWidget):
         header = QFrame(); header.setFixedHeight(50); header.setStyleSheet("background:#111; border:1px solid #00ffcc; border-radius:10px;")
         h_lay = QHBoxLayout(header)
         self.lbl_stats = QLabel("💎 -- | XP: --"); h_lay.addWidget(self.lbl_stats)
+        self.btn_mute = QPushButton("🔊")
+        self.btn_mute.setFixedSize(35, 30); self.btn_mute.clicked.connect(self.toggle_mute)
+        h_lay.addWidget(self.btn_mute)
+        
         btn_pay = QPushButton("💲 RECARGAR"); btn_pay.setStyleSheet("background:#ff0050; font-weight:bold; color:white; border-radius:5px;"); btn_pay.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://PayPal.me/JohnnyOrregoVallejo"))); h_lay.addWidget(btn_pay)
         lay.addWidget(header)
 
