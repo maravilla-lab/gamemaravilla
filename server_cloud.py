@@ -11,13 +11,12 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 DB_FILE = "base_datos.json"
 ADMIN_ID = "portal.maravilla"
-P_M, P_XP, F_XP = 100, 10, 20
-MULTA_TRAMPA = 50
+P_M, P_XP, F_XP, MULTA_TRAMPA = 100, 10, 20, 50
 
 usuarios = {}
 cont_promo = 0
 premiados_promo = []
-respuestas_prohibidas = ["verde", "maravilla", "3", "llave", "azul", "leon", "exito", "5"]
+respuestas_prohibidas = ["verde", "3", "maravilla", "llave", "blanco", "ojos", "johnny", "azul", "maravilla2026", "leon", "exito"]
 
 def cargar_db():
     global usuarios
@@ -31,22 +30,21 @@ def guardar_db():
 
 cargar_db()
 
+# --- LAS 13 TRIVIAS COMPLETAS ---
 TRIVIAS_MAESTRAS = [
-
-    {"id": 101, "cat": " Diario ⚡", "tit": "Reto TikTok 1", "costo": 10, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Qué color brilla?", "res": "verde", "premio": 1000},
-    {"id": 102, "cat": " Diario ⚡", "tit": "Reto TikTok 2", "costo": 10, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Cuántos dedos ves?", "res": "3", "premio": 1000},
-    {"id": 201, "cat": " Niveles ⭐", "tit": "Maestría I", "costo": 50, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Palabra clave?", "res": "maravilla", "premio": 500},
-    {"id": 202, "cat": " Niveles ⭐", "tit": "Maestría II", "costo": 100, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Qué objeto sale?", "res": "llave", "premio": 800},
-    {"id": 301, "cat": " Socios 🤝", "tit": "Misión Recon", "costo": 200, "url": "perfil_socio_1", "preg": "¿Color de silla?", "res": "azul", "premio": 800, "xp": 1000},
-    {"id": 302, "cat": " Socios 🤝", "tit": "Código Oro", "costo": 500, "url": "perfil_socio_2", "preg": "¿Código bio?", "res": "maravilla2026", "premio": 1500, "xp": 2000},
-    {"id": 303, "cat": " Socios 🤝", "tit": "Detective", "costo": 300, "url": "perfil_socio_3", "preg": "¿Animal logo?", "res": "leon", "premio": 1000, "xp": 1200},
+    {"id": 101, "cat": " Diario ⚡", "tit": "Reto TikTok 1", "costo": 10, "res": "verde", "premio": 1000, "xp": 500},
+    {"id": 102, "cat": " Diario ⚡", "tit": "Reto TikTok 2", "costo": 10, "res": "3", "premio": 1000, "xp": 500},
+    {"id": 201, "cat": " Niveles ⭐", "tit": "Maestría I", "costo": 50, "res": "maravilla", "premio": 500, "xp": 1000},
+    {"id": 202, "cat": " Niveles ⭐", "tit": "Maestría II", "costo": 100, "res": "llave", "premio": 800, "xp": 1500},
+    {"id": 1, "cat": " TikTok 📱", "tit": "Portal Rojo", "costo": 10, "res": "blanco", "premio": 100, "xp": 100},
+    {"id": 2, "cat": " TikTok 📱", "tit": "Efecto Neón", "costo": 15, "res": "ojos", "premio": 150, "xp": 150},
+    {"id": 3, "cat": " TikTok 📱", "tit": "Baile 777", "costo": 20, "res": "johnny", "premio": 200, "xp": 200},
+    {"id": 300, "cat": " Socios 🤝", "tit": "Patrocinio Oro", "costo": 1000, "res": "maravilla", "premio": 4000, "xp": 4000},
+    {"id": 301, "cat": " Socios 🤝", "tit": "Misión Recon", "costo": 200, "res": "azul", "premio": 800, "xp": 1000},
+    {"id": 302, "cat": " Socios 🤝", "tit": "Código Oro", "costo": 500, "res": "maravilla2026", "premio": 1500, "xp": 2000},
+    {"id": 303, "cat": " Socios 🤝", "tit": "Detective", "costo": 300, "res": "leon", "premio": 1000, "xp": 1200},
     {"id": 304, "cat": " Socios 🤝", "tit": "Socio VIP", "costo": 1500, "url": "perfil_socio_4", "preg": "¿Palabra biografía?", "res": "exito", "premio": 5000, "xp": 6000},
     {"id": 305, "cat": " Socios 🤝", "tit": "Explorador", "costo": 800, "url": "perfil_socio_5", "preg": "¿Calificación?", "res": "5", "premio": 2500, "xp": 3000},
-    {"id": 1, "cat": " TikTok 📱", "tit": "Portal Rojo", "costo": 10, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Color logo?", "res": "blanco", "premio": 100},
-    {"id": 2, "cat": " TikTok 📱", "tit": "Efecto Neón", "costo": 15, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Qué brilla?", "res": "ojos", "premio": 150},
-    {"id": 3, "cat": " TikTok 📱", "tit": "Baile 777", "costo": 20, "url": "https://www.tiktok.com/@portal.maravilla", "preg": "¿Quién sale?", "res": "johnny", "premio": 200},
-
-
 ]
 
 @app.route('/')
@@ -91,7 +89,6 @@ def verificar(data):
 
 @socketio.on('comando_masivo_97')
 def masivo(data):
-    # Comando #97: Lista de usuarios del socio
     lista_users = data.get('users', [])
     for user_id in lista_users:
         uid = user_id.lower().strip()
@@ -116,28 +113,41 @@ def run_tiktok():
             premiados_promo.append(uid)
             cont_promo += 1
             guardar_db()
-            socketio.emit('evento_especial', {'msg': f'¡Top MegaLike! @{uid} +50 XP ({cont_promo}/10)'})
+            socketio.emit('evento_especial', {'msg': f'¡MegaLike! @{uid} +50 XP ({cont_promo}/10)'})
+
+    @client.on("gift")
+    async def on_gift(event: GiftEvent):
+        uid = event.user.unique_id.lower()
+        if uid in usuarios:
+            monedas = event.gift.info.diamond_count * 100
+            usuarios[uid]['monedas'] += monedas
+            guardar_db()
+            socketio.emit('evento_especial', {'msg': f'@{uid} envió regalo: +{monedas}M'})
 
     @client.on("comment")
     async def on_comment(event: CommentEvent):
         global cont_promo, premiados_promo
         msg, uid = event.comment.lower().strip(), event.user.unique_id.lower()
         
+        # Filtro de tramposos
         if msg in respuestas_prohibidas and uid in usuarios:
             usuarios[uid]['puntos'] = max(0, usuarios[uid]['puntos'] - MULTA_TRAMPA)
             guardar_db()
-            socketio.emit('recibir_mensaje', {'user': 'SISTEMA', 'msg': f'@{uid} penalizado -50 XP por filtrar respuesta'})
+            socketio.emit('recibir_mensaje', {'user': 'SISTEMA', 'msg': f'@{uid} multa -50 XP por filtrar respuesta'})
 
         if uid == ADMIN_ID:
             if msg == "#66": socketio.emit('toggle_auto', {'active': True})
             if msg == "#67": socketio.emit('toggle_auto', {'active': False})
             if msg == "#96": 
                 cont_promo = 0; premiados_promo = []
-                socketio.emit('recibir_mensaje', {'user': 'SISTEMA', 'msg': '🔥 Promo Likes Reiniciada'})
+                socketio.emit('recibir_mensaje', {'user': 'SISTEMA', 'msg': 'Promo Likes Reiniciada'})
 
         if msg == "!puntos" and uid in usuarios:
             u = usuarios[uid]
             socketio.emit('recibir_mensaje', {'user': 'SISTEMA', 'msg': f'@{uid}: 💎{u["monedas"]}M | 🏆{u["puntos"]}XP'})
+
+        m = {"1":"rojo","2":"azul","3":"verde","4":"amarillo"}
+        if msg in m: socketio.emit('intento_usuario_tiktok', {'user': uid, 'color': m[msg]})
 
     async def start():
         try: await client.connect()
