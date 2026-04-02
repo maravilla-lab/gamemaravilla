@@ -87,7 +87,7 @@ class MaravillaGame(QWidget):
         
         # Chat e Input
         self.chat_view = QTextEdit(); self.chat_view.setReadOnly(True); self.chat_view.setFixedHeight(100); lay.addWidget(self.chat_view)
-        self.chat_in = QLineEdit(); self.chat_in.setPlaceholderText("Chat o Comando #97..."); self.chat_in.returnPressed.connect(self.enviar_chat); lay.addWidget(self.chat_in)
+        self.chat_in = QLineEdit(); self.chat_in.setPlaceholderText("Chat..."); self.chat_in.returnPressed.connect(self.enviar_chat); lay.addWidget(self.chat_in)
 
     def toggle_mute(self):
         self.muted = not self.muted
