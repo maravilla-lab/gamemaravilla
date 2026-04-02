@@ -52,7 +52,7 @@ class MaravillaGame(QWidget):
         lay = QVBoxLayout(self)
 
         # Ranking
-        self.rank_box = QLabel("🏆 RANKING..."); self.rank_box.setFixedHeight(75); self.rank_box.setAlignment(Qt.AlignCenter)
+        self.rank_box = QLabel("🏆 RANKING..."); self.rank_box.setFixedHeight(80); self.rank_box.setAlignment(Qt.AlignCenter)
         self.rank_box.setStyleSheet("background:#111; color:#ffee00; border:2px solid #ffee00; border-radius:10px; font-weight:bold;")
         lay.addWidget(self.rank_box)
 
@@ -61,7 +61,7 @@ class MaravillaGame(QWidget):
         h_lay = QHBoxLayout(header)
         self.lbl_stats = QLabel("💎 -- | XP: --"); h_lay.addWidget(self.lbl_stats)
         
-        self.btn_mute = QPushButton("🔊"); self.btn_mute.setFixedSize(40, 30); self.btn_mute.clicked.connect(self.toggle_mute)
+        self.btn_mute = QPushButton("🔊"); self.btn_mute.setFixedSize(40, 40); self.btn_mute.clicked.connect(self.toggle_mute)
         self.btn_mute.setStyleSheet("background:#222; border-radius:5px;")
         h_lay.addWidget(self.btn_mute)
         
